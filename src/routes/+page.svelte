@@ -13,7 +13,6 @@
 	import { fetch } from "@tauri-apps/plugin-http";
 	import { download } from "@tauri-apps/plugin-upload";
 	import { exit } from "@tauri-apps/plugin-process";
-
 	// import { exit } from '@tauri-apps/plugin-process';
 
 	onMount(async () => {
@@ -49,7 +48,6 @@
 					directory: true,
 				});
 
-				
 				config = {
 					...config,
 					"mc-dir": dir,
@@ -71,7 +69,7 @@
 					);
 
 					if (!conf) {
-						exit(1)
+						exit(1);
 					}
 					continue;
 				}
@@ -284,7 +282,7 @@
 
 <main class="minecraft-app">
 	<div class="header">
-		<h1 class="title">MINECRAFT MOD MANAGER</h1>
+		<h1 class="title">ModBox</h1>
 	</div>
 
 	<div class="content">
