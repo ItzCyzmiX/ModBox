@@ -10,7 +10,7 @@
 	} from "@tauri-apps/plugin-fs";
 	import { open, confirm } from "@tauri-apps/plugin-dialog";
 	import { path } from "@tauri-apps/api";
-	import { fetch } from "@tauri-apps/plugin-http";
+	// import { fetch } from "@tauri-apps/plugin-http";
 	import { download } from "@tauri-apps/plugin-upload";
 	import { exit } from "@tauri-apps/plugin-process";
 	// import { exit } from '@tauri-apps/plugin-process';
