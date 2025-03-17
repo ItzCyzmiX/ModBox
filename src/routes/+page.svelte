@@ -161,6 +161,7 @@
 		if (activeCategory === "Browse") {
 			loading = true;
 			let mods = [];
+			let json = {}
 			try {
 				const res = await fetch(
 					`https://api.curseforge.com/v1/mods/search?gameId=${MC_GAME_ID}&searchFilter=${searchQuery}&index=${searchPage}`,
@@ -176,7 +177,7 @@
 				console.log(res)
 				console.log(res.statusText)
 
-				const json = await res.json();
+				json = await res.json();
 
 				mods = json.data;
 			} catch (e) {
