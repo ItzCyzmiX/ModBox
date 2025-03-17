@@ -8,6 +8,7 @@
 		writeTextFile,
 		remove,
 		stat,
+		mkdir,
 	} from "@tauri-apps/plugin-fs";
 	import { open, confirm } from "@tauri-apps/plugin-dialog";
 	import { path } from "@tauri-apps/api";
@@ -48,7 +49,7 @@
 				continue;
 			}
 
-			await writeTextFile("config.json", JSON.stringify(config), {
+			await writeTextFile("config/config.json", JSON.stringify(config), {
 				baseDir: BaseDirectory.AppData,
 			});
 			break;
@@ -57,7 +58,18 @@
 
 	onMount(async () => {
 		const decoder = new TextDecoder();
-		const config_file_exists = await exists("config.json", {
+
+		const app_data_exists = await exists("config", {
+			baseDir: BaseDirectory.AppData,
+		});
+
+		if (!app_data_exists) {
+			await mkdir("config", {
+				baseDir: BaseDirectory.AppData,
+			});
+		}
+
+		const config_file_exists = await exists("config/config.json", {
 			baseDir: BaseDirectory.AppData,
 		});
 
@@ -65,7 +77,7 @@
 
 		if (!config_file_exists) {
 			await writeTextFile(
-				"config.json",
+				"config/config.json",
 				JSON.stringify({
 					"mc-dir": false,
 				}),
@@ -75,7 +87,7 @@
 			);
 		}
 
-		config_file = await readFile("config.json", {
+		config_file = await readFile("config/config.json", {
 			baseDir: BaseDirectory.AppData,
 		});
 
@@ -251,7 +263,7 @@
 							};
 							// Save to config file
 							writeTextFile(
-								"config.json",
+								"config/config.json",
 								JSON.stringify(config),
 								{
 									baseDir: BaseDirectory.AppData,
@@ -332,7 +344,7 @@
 					installed: installedMods,
 				};
 				// Save to config file
-				writeTextFile("config.json", JSON.stringify(config), {
+				writeTextFile("config/config.json", JSON.stringify(config), {
 					baseDir: BaseDirectory.AppData,
 				});
 			}

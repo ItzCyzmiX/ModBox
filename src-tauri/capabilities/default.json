@@ -48,6 +48,14 @@
       ]
     },
     {
+      "identifier": "fs:allow-mkdir",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    {
       "identifier": "fs:scope",
       "allow": [
         {
