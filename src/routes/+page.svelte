@@ -57,6 +57,7 @@
 	}
 
 	onMount(async () => {
+		console.log(PUBLIC_FORGE_API)
 		const decoder = new TextDecoder();
 		const config_file_exists = await exists("config.json", {
 			baseDir: BaseDirectory.AppData,
