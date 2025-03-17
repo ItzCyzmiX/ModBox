@@ -37,7 +37,7 @@ jobs:
 
             - uses: oven-sh/setup-bun@v2
             - name: Setup Env Vars
-              run: echo "VITE_FORGE_API=${{ secrets.VITE_FORGE_API }}" >> .env
+              run: echo "PUBLIC_FORGE_API=${{ secrets.PUBLIC_FORGE_API }}" >> .env
 
             - name: Install Rust
               uses: dtolnay/rust-toolchain@stable
