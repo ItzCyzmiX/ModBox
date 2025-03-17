@@ -1,5 +1,5 @@
 <script>
-	import { fly } from "svelte/transition";
+	import { fade, fly, scale, slide } from "svelte/transition";
 	import { onMount } from "svelte";
 	import {
 		BaseDirectory,
@@ -7,6 +7,7 @@
 		exists,
 		writeTextFile,
 		remove,
+		stat,
 	} from "@tauri-apps/plugin-fs";
 	import { open, confirm } from "@tauri-apps/plugin-dialog";
 	import { path } from "@tauri-apps/api";
@@ -14,6 +15,46 @@
 	import { download } from "@tauri-apps/plugin-upload";
 	import { exit } from "@tauri-apps/plugin-process";
 	// import { exit } from '@tauri-apps/plugin-process';
+
+	async function changeMCDir() {
+		while (true) {
+			const dir = await open({
+				multiple: false,
+				directory: true,
+			});
+
+			config = {
+				...config,
+				"mc-dir": dir,
+			};
+
+			let mods_dir = await path.join(dir, "mods");
+
+			const mods_dir_exists = await exists(mods_dir);
+
+			if (!mods_dir_exists) {
+				let conf = await confirm(
+					"The selected path is not a valid minecraft path, you will be asked to re-enter another one",
+					{
+						title: "MC path Error",
+						kind: "error",
+						okLabel: "retry",
+						cancelLabel: "exit",
+					},
+				);
+
+				if (!conf) {
+					exit(1);
+				}
+				continue;
+			}
+
+			await writeTextFile("config.json", JSON.stringify(config), {
+				baseDir: BaseDirectory.AppData,
+			});
+			break;
+		}
+	}
 
 	onMount(async () => {
 		const decoder = new TextDecoder();
@@ -42,46 +83,32 @@
 		config = JSON.parse(decoder.decode(config_file));
 
 		if (!config["mc-dir"]) {
-			while (true) {
-				const dir = await open({
-					multiple: false,
-					directory: true,
-				});
-
-				config = {
-					...config,
-					"mc-dir": dir,
-				};
-
-				let mods_dir = await path.join(dir, "mods");
-
-				const mods_dir_exists = await exists(mods_dir);
-
-				if (!mods_dir_exists) {
-					let conf = await confirm(
-						"The selected path is not a valid minecraft path, you will be asked to re-enter another one",
-						{
-							title: "MC path Error",
-							kind: "error",
-							okLabel: "retry",
-							cancelLabel: "exit",
-						},
-					);
-
-					if (!conf) {
-						exit(1);
-					}
-					continue;
-				}
-
-				await writeTextFile("config.json", JSON.stringify(config), {
-					baseDir: BaseDirectory.AppData,
-				});
-				break;
-			}
+			await changeMCDir()
 		}
 		if (config.installed) {
 			installedMods = config.installed;
+		}
+
+		let res = await fetch(
+			"https://api.curseforge.com/v1/minecraft/version",
+			{
+				method: "GET",
+				headers: {
+					Accept: "application/json",
+					"x-api-key": import.meta.env.VITE_FORGE_API,
+				},
+			},
+		);
+
+		const json = await res.json();
+
+		const versions = json.data;
+
+		for (let v of versions) {
+			mc_versions = {
+				...mc_versions,
+				[v.versionString]: v.gameVersionId,
+			};
 		}
 	});
 
@@ -92,16 +119,24 @@
 		installed: [],
 	});
 	let installedMods = $state([]);
+	let showPopup = $state(false);
+	let selectedVersions = $state([]);
+	let versionSearch = $state("");
+	let statusMessage = $state("");
+	let statusType = $state("");
 
 	// State variables
 	const MC_GAME_ID = 432;
-
+	let mc_versions = $state({});
 	let activeCategory = $state("Installed");
 	let searchQuery = $state("");
 	let allMods = $state([]);
+	let filteredMods = $state([]);
 	let modsToShow = $derived(
 		activeCategory === "Browse"
-			? allMods
+			? selectedVersions.length > 0
+				? filteredMods
+				: allMods
 			: activeCategory === "Installed"
 				? installedMods
 				: [],
@@ -109,19 +144,17 @@
 	let searchPage = $state(0);
 	// Filter mods based on search query
 
-	let filteredMods = $derived(
-		installedMods.filter(
-			(mod) =>
-				mod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				mod.description
-					.toLowerCase()
-					.includes(searchQuery.toLowerCase()),
-		),
-	);
-
 	// Category click handler
 	function selectCategory(category) {
 		activeCategory = category;
+	}
+
+	function showStatusMessage(message, type) {
+		statusMessage = message;
+		statusType = type;
+		setTimeout(() => {
+			statusMessage = "";
+		}, 3000);
 	}
 
 	async function search() {
@@ -151,7 +184,7 @@
 					author: v.authors.reduce((p, c) => {
 						return p + c.name;
 					}, ""),
-					version: v.latestFiles[0].gameVersions[0],
+					version: v.latestFiles[0].gameVersions,
 					file: v.latestFiles[0].downloadUrl,
 					fileSize: v.latestFiles[0].fileSizeOnDisk,
 				};
@@ -227,28 +260,42 @@
 				});
 			},
 		);
+	}
 
-		// if (downloadingMods[i].status === "complete") {
-		// 	// Add mod to installed mods when download completes
-		// 	installedMods = [
-		// 		...installedMods,
-		// 		{
-		// 			...allMods[id],
-		// 			fileName: fileName,
-		// 		},
-		// 	];
-		// 	console.log(installedMods);
-		// 	// Update config
-		// 	config = {
-		// 		...config,
-		// 		installed: installedMods,
-		// 	};
-		// 	console.log(config);
-		// 	// Save to config file
-		// 	writeTextFile("config.json", JSON.stringify(config), {
-		// 		baseDir: BaseDirectory.AppData,
-		// 	});
-		// }
+	function togglePopup() {
+		showPopup = !showPopup;
+	}
+
+	function clearFilters() {
+		selectedVersions = [];
+	}
+
+	function toggleVersion(name) {
+		const ex = selectedVersions.indexOf(name);
+		if (ex !== -1) {
+			selectedVersions = selectedVersions.filter((v, i) => {
+				return v !== name;
+			});
+		} else {
+			if (mc_versions[name]) {
+				selectedVersions = [...selectedVersions, name];
+			}
+		}
+	}
+
+	function applyFilters() {
+		filteredMods = allMods.filter((mod, i) => {
+			return mod.version.some((version) =>
+				selectedVersions.includes(version),
+			);
+		});
+		console.log(filteredMods);
+		showPopup = false;
+	}
+
+	function cancelFIlters() {
+		clearFilters();
+		showPopup = false;
 	}
 
 	async function removeMod(id) {
@@ -330,9 +377,22 @@
 						}}
 						class="filter-button">SEARCH</button
 					>
+					<button class="minecraft-button" onclick={togglePopup}>
+						FILTER
+					</button>
 				{/if}
 			</div>
 			{#if activeCategory === "Browse" || activeCategory === "Installed"}
+				{#if selectedVersions.length > 0}
+					<div class="selected-filters">
+						<span
+							>Active filters: {selectedVersions.join(", ")}</span
+						>
+						<button class="clear-button" onclick={clearFilters}
+							>CLEAR</button
+						>
+					</div>
+				{/if}
 				<div class="mod-grid">
 					{#each modsToShow as mod, id}
 						<div
@@ -342,7 +402,9 @@
 							<div class="mod-header"></div>
 							<div class="mod-content">
 								<h3>{mod.name}</h3>
-								<p class="version">v{mod.version}</p>
+								<p class="version">
+									{mod.version.join(" / ")}
+								</p>
 								<p class="description">{mod.description}</p>
 								<div class="mod-footer">
 									<span>By {mod.author}</span>
@@ -415,73 +477,28 @@
 										: "Complete"}</span
 								>
 							</div>
-
-							<!-- <button class="minecraft-download-cancel"
-								>CANCEL</button
-							> -->
 						</div>
 					{/each}
-
-					<!-- Completed Download
-					<div
-						class="minecraft-download-container minecraft-download-complete"
-					>
-						<div class="minecraft-download-header">
-							<h3 class="minecraft-download-title">JourneyMap</h3>
-							<span class="minecraft-download-percentage"
-								>100%</span
-							>
-						</div>
-
-						<div class="minecraft-download-bar-container">
-							<div
-								class="minecraft-download-bar"
-								style="width: 100%;"
-							></div>
-						</div>
-
-						<div class="minecraft-download-info">
-							<span class="minecraft-download-file"
-								>journeymap-1.19.2-5.9.0beta2.jar</span
-							>
-							<span class="minecraft-download-speed"
-								>Complete</span
-							>
-						</div>
-					</div>
-
-					Error state Download
-					<div
-						class="minecraft-download-container minecraft-download-error"
-					>
-						<div class="minecraft-download-header">
-							<h3 class="minecraft-download-title">Fabric API</h3>
-							<span class="minecraft-download-percentage"
-								>Error</span
-							>
-						</div>
-
-						<div class="minecraft-download-bar-container">
-							<div
-								class="minecraft-download-bar"
-								style="width: 100%;"
-							></div>
-						</div>
-
-						<div class="minecraft-download-info">
-							<span class="minecraft-download-file"
-								>fabric-api-0.76.0+1.19.2.jar</span
-							>
-							<span class="minecraft-download-speed"
-								>Connection Failed</span
-							>
-						</div>
-
-						<button class="minecraft-download-cancel">RETRY</button>
-					</div> -->
 				</div>
 			{:else}
-				nigs
+				<div class="setting-item">
+					<h2>Minecraft Installation</h2>
+					<label for="minecraft-path"
+						>Minecraft Installation Path:</label
+					>
+					<div class="path-input">
+						<input
+							type="text"
+							id="minecraft-path"
+							class="minecraft-input"
+							bind:value={config["mc-dir"]}
+							readonly
+						/>
+						<button class="filter-button" onclick={changeMCDir}>
+							Browse...
+						</button>
+					</div>
+				</div>
 			{/if}
 			{#if activeCategory === "Browse" && modsToShow.length > 0}
 				<div class="load-more-container">
@@ -512,6 +529,60 @@
 				<div></div>
 				<div></div>
 				<div></div>
+			</div>
+		</div>
+	{/if}
+
+	{#if showPopup}
+		<div class="popup-overlay" out:fade>
+			<div class="popup minecraft-panel">
+				<div class="popup-header">
+					<h2>Select Minecraft Versions</h2>
+					<button class="close-button" onclick={togglePopup}>✕</button
+					>
+				</div>
+
+				<div class="popup-content">
+					<div class="search-box">
+						<input
+							type="text"
+							placeholder="Search versions..."
+							bind:value={versionSearch}
+							class="minecraft-input"
+						/>
+					</div>
+
+					<div class="version-list" transition:slide>
+						{#each Object.entries(mc_versions) as [name, version]}
+							{#if name.includes(versionSearch)}
+								<button
+									class="version-item"
+									class:selected={version}
+									onclick={() => toggleVersion(name)}
+								>
+									<div
+										class="checkbox"
+										class:checked={selectedVersions.includes(
+											name,
+										)}
+									></div>
+									<span>{name}</span>
+								</button>
+							{/if}
+						{/each}
+					</div>
+				</div>
+
+				<div class="popup-footer">
+					<button
+						class="minecraft-button cancel"
+						onclick={cancelFIlters}>Cancel</button
+					>
+					<button
+						class="minecraft-button apply"
+						onclick={applyFilters}>Apply</button
+					>
+				</div>
 			</div>
 		</div>
 	{/if}
@@ -599,7 +670,45 @@
 		cursor: pointer;
 		transition: all 0.2s ease;
 	}
+	.settings-section h2 {
+		margin-top: 0;
+		margin-bottom: 15px;
+		color: #333333;
+		border-bottom: 2px solid #5a5a5a;
+		padding-bottom: 5px;
+		text-shadow: 1px 1px 0 #aaaaaa;
+	}
 
+	.setting-item {
+		margin-bottom: 15px;
+	}
+
+	.setting-item label {
+		display: block;
+		margin-bottom: 5px;
+		color: #333333;
+		font-weight: bold;
+	}
+
+	/* Input styling */
+	.minecraft-input {
+		width: 100%;
+		border: 2px solid #000;
+		border-bottom-width: 4px;
+		border-right-width: 4px;
+		background-color: #8b8b8b;
+		color: white;
+		padding: 8px;
+	}
+
+	.path-input {
+		display: flex;
+		gap: 10px;
+	}
+
+	.path-input .minecraft-input {
+		flex: 1;
+	}
 	.sidebar button:hover {
 		background-color: #4c4c4c;
 	}
@@ -918,6 +1027,13 @@
 		display: none;
 	}
 
+	.setting-item label {
+		display: block;
+		margin-bottom: 5px;
+		color: #333333;
+		font-weight: bold;
+	}
+
 	.minecraft-spinner-fallback div {
 		position: absolute;
 		width: 24px;
@@ -1225,5 +1341,226 @@
 
 	.minecraft-downloads-queue::-webkit-scrollbar-thumb:hover {
 		background: #55ff55;
+	}
+
+	/* Popup styles */
+	.popup-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: rgba(0, 0, 0, 0.7);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		z-index: 1000;
+	}
+
+	.popup {
+		width: 90%;
+		max-width: 500px;
+		max-height: 80vh;
+		display: flex;
+		flex-direction: column;
+		border: 6px solid #555;
+		box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+	}
+
+	/* Minecraft panel with dirt texture */
+	.minecraft-panel {
+		background-color: #8b8b8b;
+		background-image: linear-gradient(45deg, #7d7d7d 25%, transparent 25%),
+			linear-gradient(-45deg, #7d7d7d 25%, transparent 25%),
+			linear-gradient(45deg, transparent 75%, #7d7d7d 75%),
+			linear-gradient(-45deg, transparent 75%, #7d7d7d 75%);
+		background-size: 4px 4px;
+		position: relative;
+		padding: 4px;
+		
+	}
+
+	.popup-header {
+		background-color: #5a5a5a;
+		border-bottom: 4px solid #555;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 10px;
+	}
+
+	.popup-header h2 {
+		margin: 0;
+		color: #ffffff;
+		text-shadow: 2px 2px 0 #3a3a3a;
+		font-size: 18px;
+	}
+
+	.close-button {
+		background: none;
+		border: none;
+		font-size: 18px;
+		cursor: pointer;
+		color: #ffffff;
+	}
+
+	.popup-content {
+		padding: 10px;
+		background-color: #c6c6c6;
+		overflow-y: auto;
+		flex-grow: 1;
+	}
+
+	.popup-footer {
+		display: flex;
+		justify-content: space-between;
+		padding: 10px;
+		background-color: #5a5a5a;
+		border-top: 4px solid #555;
+	}
+
+	/* Minecraft button style */
+	.minecraft-button {
+		background-color: #757575;
+		border: 2px solid #000;
+		border-bottom-width: 4px;
+		border-right-width: 4px;
+		color: white;
+		text-shadow: 2px 2px 0 #3a3a3a;
+		padding: 8px 12px;
+		font-size: 14px;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition: all 0.1s;
+	}
+
+	.minecraft-button:hover {
+		background-color: #8b8b8b;
+	}
+
+	.minecraft-button:active {
+		border-bottom-width: 2px;
+		border-right-width: 2px;
+		transform: translate(2px, 2px);
+	}
+
+	.minecraft-button.apply {
+		background-color: #546d1b; /* Green for "Apply" */
+	}
+
+	.minecraft-button.apply:hover {
+		background-color: #6a8c34;
+	}
+
+	.minecraft-button.cancel {
+		background-color: #754343; /* Redstone-ish for "Cancel" */
+	}
+
+	.minecraft-button.cancel:hover {
+		background-color: #8a5151;
+	}
+
+	/* Input styling */
+	.minecraft-input {
+		width: 93%;
+		border: 2px solid #000;
+		border-bottom-width: 4px;
+		border-right-width: 4px;
+		background-color: #8b8b8b;
+		color: white;
+		padding: 14px;
+		margin-bottom: 15px;
+	}
+
+	.minecraft-input::placeholder {
+		color: #ccc;
+	}
+
+	/* Version list styling */
+	.version-list {
+		max-height: 300px;
+		overflow-y: auto;
+		border: 4px solid #555;
+		background-color: #8b8b8b;
+	}
+
+	.version-item {
+		display: flex;
+		align-items: center;
+		padding: 8px 12px;
+		cursor: pointer;
+		color: white;
+		text-shadow: 1px 1px 0 #3a3a3a;
+		border-bottom: 2px solid #555;
+		width: 100%;
+	}
+
+	.version-item:hover {
+		background-color: rgba(255, 255, 255, 0.1);
+	}
+
+	.version-item.selected {
+		background-color: rgba(
+			84,
+			109,
+			27,
+			0.3
+		); /* Green tint for selected items */
+	}
+
+	/* Checkbox styling to look like Minecraft UI */
+	.checkbox {
+		width: 20px;
+		height: 20px;
+		border: 2px solid #000;
+		background-color: #5a5a5a;
+		margin-right: 10px;
+		position: relative;
+	}
+
+	.checkbox.checked {
+		background-color: #546d1b;
+	}
+
+	.checkbox.checked::after {
+		content: "✓";
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		color: white;
+	}
+
+	/* Selected filters display */
+	.selected-filters {
+		margin-top: 10px;
+		padding: 8px;
+		background-color: rgba(84, 109, 27, 0.2);
+		border: 2px solid #546d1b;
+		color: white;
+		display: flex;
+		justify-content: space-between;
+	}
+
+	.clear-button {
+		background: none;
+		border: none;
+		color: #ff8888;
+		cursor: pointer;
+		text-decoration: underline;
+	}
+
+	/* Custom scrollbar to match Minecraft theme */
+	.version-list::-webkit-scrollbar {
+		width: 12px;
+	}
+
+	.version-list::-webkit-scrollbar-track {
+		background: #5a5a5a;
+	}
+
+	.version-list::-webkit-scrollbar-thumb {
+		background: #757575;
+		border: 2px solid #000;
 	}
 </style>
