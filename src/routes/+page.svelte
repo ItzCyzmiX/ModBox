@@ -83,7 +83,7 @@
 		config = JSON.parse(decoder.decode(config_file));
 
 		if (!config["mc-dir"]) {
-			await changeMCDir()
+			await changeMCDir();
 		}
 		if (config.installed) {
 			installedMods = config.installed;
@@ -160,20 +160,28 @@
 	async function search() {
 		if (activeCategory === "Browse") {
 			loading = true;
-			const res = await fetch(
-				`https://api.curseforge.com/v1/mods/search?gameId=${MC_GAME_ID}&searchFilter=${searchQuery}&index=${searchPage}`,
-				{
-					method: "GET",
-					headers: {
-						Accept: "application/json",
-						"x-api-key": import.meta.env.VITE_FORGE_API,
+			let mods = [];
+			try {
+				const res = await fetch(
+					`https://api.curseforge.com/v1/mods/search?gameId=${MC_GAME_ID}&searchFilter=${searchQuery}&index=${searchPage}`,
+					{
+						method: "GET",
+						headers: {
+							Accept: "application/json",
+							"x-api-key": import.meta.env.VITE_FORGE_API,
+						},
 					},
-				},
-			);
+				);
 
-			const json = await res.json();
+				console.log(res)
+				console.log(res.statusText)
 
-			const mods = json.data;
+				const json = await res.json();
+
+				mods = json.data;
+			} catch (e) {
+				throw e;
+			}
 
 			let _allMods = mods.map((v) => {
 				return {
@@ -1377,7 +1385,6 @@
 		background-size: 4px 4px;
 		position: relative;
 		padding: 4px;
-		
 	}
 
 	.popup-header {
