@@ -95,7 +95,7 @@
 				method: "GET",
 				headers: {
 					Accept: "application/json",
-					"x-api-key": import.meta.env.VITE_FORGE_API,
+					"x-api-key": "$2a$10$3MKF0WNYQh7DwMyDsQEZOuomuqV8vjxy5k64wt4AhmRv8tMsmu6TC",
 				},
 			},
 		);
