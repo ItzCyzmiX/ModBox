@@ -15,7 +15,7 @@
 	import { download } from "@tauri-apps/plugin-upload";
 	import { exit } from "@tauri-apps/plugin-process";
 	// import { exit } from '@tauri-apps/plugin-process';
-	import { PUBLIC_FORGE_API } from "$env/static/public"
+	// import { PUBLIC_FORGE_API } from "$env/static/public"
 	async function changeMCDir() {
 		while (true) {
 			const dir = await open({
@@ -168,7 +168,7 @@
 						method: "GET",
 						headers: {
 							Accept: "application/json",
-							"x-api-key": import.meta.env.VITE_FORGE_API,
+							"x-api-key": "$2a$10$3MKF0WNYQh7DwMyDsQEZOuomuqV8vjxy5k64wt4AhmRv8tMsmu6TC",
 						},
 					},
 				);
