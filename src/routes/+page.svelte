@@ -94,7 +94,8 @@
 				method: "GET",
 				headers: {
 					Accept: "application/json",
-					"x-api-key": "$2a$10$3MKF0WNYQh7DwMyDsQEZOuomuqV8vjxy5k64wt4AhmRv8tMsmu6TC",
+					"x-api-key":
+						"$2a$10$3MKF0WNYQh7DwMyDsQEZOuomuqV8vjxy5k64wt4AhmRv8tMsmu6TC",
 				},
 			},
 		);
@@ -160,7 +161,7 @@
 		if (activeCategory === "Browse") {
 			loading = true;
 			let mods = [];
-			let json = {}
+			let json = {};
 			try {
 				const res = await fetch(
 					`https://api.curseforge.com/v1/mods/search?gameId=${MC_GAME_ID}&searchFilter=${searchQuery}&index=${searchPage}`,
@@ -168,13 +169,14 @@
 						method: "GET",
 						headers: {
 							Accept: "application/json",
-							"x-api-key": "$2a$10$3MKF0WNYQh7DwMyDsQEZOuomuqV8vjxy5k64wt4AhmRv8tMsmu6TC",
+							"x-api-key":
+								"$2a$10$3MKF0WNYQh7DwMyDsQEZOuomuqV8vjxy5k64wt4AhmRv8tMsmu6TC",
 						},
 					},
 				);
 
-				console.log(res)
-				console.log(res.statusText)
+				console.log(res);
+				console.log(res.statusText);
 
 				json = await res.json();
 
@@ -202,6 +204,9 @@
 
 			searchPage += json.pagination.index;
 
+			if (selectedVersions.length > 0) {
+				applyFilters();
+			}
 			loading = false;
 		}
 	}
@@ -297,7 +302,7 @@
 				selectedVersions.includes(version),
 			);
 		});
-		console.log(filteredMods);
+
 		showPopup = false;
 	}
 
@@ -370,27 +375,27 @@
 		</div>
 
 		<div class="main-content">
-			<div class="search-bar">
-				<input
-					type="text"
-					placeholder="Search mods..."
-					bind:value={searchQuery}
-				/>
-				{#if activeCategory === "Browse"}
-					<button
-						onclick={async () => {
-							allMods = [];
-							searchPage = 0;
-							await search();
-						}}
-						class="filter-button">SEARCH</button
-					>
-					<button class="minecraft-button" onclick={togglePopup}>
-						FILTER
-					</button>
-				{/if}
-			</div>
 			{#if activeCategory === "Browse" || activeCategory === "Installed"}
+				<div class="search-bar">
+					<input
+						type="text"
+						placeholder="Search mods..."
+						bind:value={searchQuery}
+					/>
+					{#if activeCategory === "Browse"}
+						<button
+							onclick={async () => {
+								allMods = [];
+								searchPage = 0;
+								await search();
+							}}
+							class="filter-button">SEARCH</button
+						>
+						<button class="minecraft-button" onclick={togglePopup}>
+							FILTER
+						</button>
+					{/if}
+				</div>
 				{#if selectedVersions.length > 0}
 					<div class="selected-filters">
 						<span
