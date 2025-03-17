@@ -15,7 +15,7 @@
 	import { download } from "@tauri-apps/plugin-upload";
 	import { exit } from "@tauri-apps/plugin-process";
 	// import { exit } from '@tauri-apps/plugin-process';
-
+	import { PUBLIC_FORGE_API } from "$env/static/public"
 	async function changeMCDir() {
 		while (true) {
 			const dir = await open({

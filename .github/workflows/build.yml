@@ -14,16 +14,19 @@ jobs:
         steps:
             - name: Checkout Code
               uses: actions/checkout@v4
+
             - name: Cache Rust dependencies (Windows)
               uses: actions/cache@v3
               with:
                   path: |
                       ~\AppData\Local\cargo\registry
                       ~\AppData\Local\cargo\git
-                      src-tauri\target
-                  key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+                      target\
+                      src-tauri\target\
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'src-tauri/Cargo.toml') }}
                   restore-keys: |
                       ${{ runner.os }}-cargo-
+
             - name: Cache Bun dependencies
               uses: actions/cache@v3
               with:
