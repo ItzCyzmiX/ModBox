@@ -159,9 +159,6 @@
 				: [],
 	);
 	let searchPage = $state(0);
-	// Filter mods based on search query
-
-	// Category click handler
 	function selectCategory(category) {
 		activeCategory = category;
 	}
@@ -531,7 +528,7 @@
 											: "UPDATE"}</button
 									>
 								{:else}
-									<p>already installed</p>
+									<p>mod already installed</p>
 								{/if}
 
 								{#if activeCategory === "Installed"}

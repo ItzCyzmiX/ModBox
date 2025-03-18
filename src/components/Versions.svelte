@@ -11,7 +11,6 @@
         versionSearch
 	} = $props();
 
-	
 </script>
 
 <div class="popup-overlay" out:fade>
