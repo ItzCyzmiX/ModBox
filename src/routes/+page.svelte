@@ -19,6 +19,20 @@
 	import LoadMore from "../components/LoadMore.svelte";
 	import Settings from "../components/Settings.svelte";
 	import Sidebare from "../components/Sidebare.svelte";
+	import Filters from "../components/Filters.svelte";
+	import Search from "../components/Search.svelte";
+	import ModCard from "../components/ModGrid.svelte";
+	import ModGrid from "../components/ModGrid.svelte";
+	import DownloadQueue from "../components/DownloadQueue.svelte";
+	import { downloadMod, updateMod, removeMod } from "$lib/modUtils.svelte";
+	import {
+		config,
+		allMods,
+		installedMods,
+		downloadingMods,
+		activeCategory,
+		searchPage,
+	} from "$lib/state.svelte";
 
 	async function changeMCDir() {
 		while (true) {
@@ -27,10 +41,13 @@
 				directory: true,
 			});
 
-			config = {
-				...config,
+			if (dir === null) {
+				return;
+			}
+			config.set({
+				...$config,
 				"mc-dir": dir,
-			};
+			});
 
 			let mods_dir = await path.join(dir, "mods");
 
@@ -53,7 +70,7 @@
 				continue;
 			}
 
-			await writeTextFile("config.json", JSON.stringify(config), {
+			await writeTextFile("config.json", JSON.stringify($config), {
 				baseDir: BaseDirectory.AppData,
 			});
 			break;
@@ -93,13 +110,13 @@
 			baseDir: BaseDirectory.AppData,
 		});
 
-		config = JSON.parse(decoder.decode(config_file));
+		config.set(JSON.parse(decoder.decode(config_file)));
 
-		if (!config["mc-dir"]) {
+		if (!$config["mc-dir"]) {
 			await changeMCDir();
 		}
-		if (config.installed) {
-			installedMods = config.installed;
+		if ($config.installed) {
+			installedMods.set($config.installed);
 		}
 
 		let res = await fetch(
@@ -128,11 +145,11 @@
 
 	// Mock data for installed mods
 	let loading = $state(false);
-	let downloadingMods = $state([]);
-	let config = $state({
-		installed: [],
-	});
-	let installedMods = $state([]);
+	// let downloadingMods = $state([]);
+	// let config = $state({
+	// 	installed: [],
+	// });
+	// let installedMods = $state([]);
 	let showPopup = $state(false);
 	let selectedVersions = $state([]);
 	let versionSearch = $state("");
@@ -142,25 +159,25 @@
 	// State variables
 	const MC_GAME_ID = 432;
 	let mc_versions = $state({});
-	let activeCategory = $state("Installed");
+	// let activeCategory = $state("Installed");
 	let searchQuery = $state("");
-	let allMods = $state([]);
+	// let allMods = $state([]);
 	let filteredMods = $state([]);
 	let filteredInstalledMods = $state([]);
 	let modsToShow = $derived(
-		activeCategory === "Browse"
+		$activeCategory === "Browse"
 			? selectedVersions.length > 0
 				? filteredMods
-				: allMods
-			: activeCategory === "Installed"
+				: $allMods
+			: $activeCategory === "Installed"
 				? filteredInstalledMods.length > 0
 					? filteredInstalledMods
-					: installedMods
+					: $installedMods
 				: [],
 	);
-	let searchPage = $state(0);
+
 	function selectCategory(category) {
-		activeCategory = category;
+		activeCategory.set(category);
 	}
 
 	function showStatusMessage(message, type) {
@@ -172,13 +189,13 @@
 	}
 
 	async function search() {
-		if (activeCategory === "Browse") {
+		if ($activeCategory === "Browse") {
 			loading = true;
 			let mods = [];
 			let json = {};
 			try {
 				const res = await fetch(
-					`https://api.curseforge.com/v1/mods/search?gameId=${MC_GAME_ID}&searchFilter=${searchQuery}&index=${searchPage}`,
+					`https://api.curseforge.com/v1/mods/search?gameId=${MC_GAME_ID}&searchFilter=${searchQuery}&index=${$searchPage}`,
 					{
 						method: "GET",
 						headers: {
@@ -208,183 +225,21 @@
 					version: v.latestFiles[0].gameVersions,
 					file: v.latestFiles[0].downloadUrl,
 					fileSize: v.latestFiles[0].fileSizeOnDisk,
-					alrInstalled: installedMods.some((vx, i) => {
+					alrInstalled: $installedMods.some((vx, i) => {
 						return vx.id === v.id;
 					}),
 					fileDate: v.latestFiles[0].fileDate,
 				};
 			});
 
-			allMods = [...allMods, ..._allMods];
+			allMods.set([...$allMods, ..._allMods]);
 
-			searchPage += json.pagination.index;
+			searchPage.set(($searchPage += json.pagination.index));
 
 			if (selectedVersions.length > 0) {
 				applyFilters();
 			}
 			loading = false;
-		}
-	}
-
-	async function downloadMod(id) {
-		const downloadLink = allMods[id].file;
-		const fileNameList = downloadLink.split("/");
-		const fileName = fileNameList[fileNameList.length - 1];
-
-		const modsPath = await path.join(config["mc-dir"], "mods", fileName);
-
-		const i = downloadingMods.length;
-		downloadingMods = [
-			...downloadingMods,
-			{
-				...allMods[id],
-				downloadProgress: 0,
-				bytesWritten: 0,
-				status: "pending",
-				fileName: fileName,
-			},
-		];
-
-		await download(
-			downloadLink,
-			modsPath,
-			({ progress, progressTotal }) => {
-				downloadingMods = downloadingMods.map((v, ind) => {
-					if (ind === i) {
-						const isComplete = progress === 0;
-						if (isComplete) {
-							const newMod = {
-								...allMods[id],
-								fileName: fileName,
-							};
-							// Force reactivity by creating new array
-							installedMods = [...installedMods, newMod];
-							// Update config
-							config = {
-								...config,
-								installed: installedMods,
-							};
-							// Save to config file
-							writeTextFile(
-								"config.json",
-								JSON.stringify(config),
-								{
-									baseDir: BaseDirectory.AppData,
-								},
-							);
-						}
-						return {
-							...v,
-							downloadProgress:
-								progress === 0
-									? 100
-									: (progressTotal * 100) / v.fileSize,
-							bytesWritten:
-								progress === 0 ? v.fileSize : progressTotal,
-							status: progress === 0 ? "complete" : "pending",
-						};
-					}
-					return v;
-				});
-			},
-		);
-	}
-
-	async function updateMod(id) {
-		const mod_id = installedMods[id].id;
-		const res = await fetch(
-			`https://api.curseforge.com/v1/mods/${mod_id}`,
-			{
-				method: "GET",
-				headers: {
-					Accept: "application/json",
-					"x-api-key":
-						"$2a$10$3MKF0WNYQh7DwMyDsQEZOuomuqV8vjxy5k64wt4AhmRv8tMsmu6TC",
-				},
-			},
-		);
-
-		const json = await res.json();
-		let mod = json.data;
-		let mod_latest_date = new Date(mod.latestFiles[0].fileDate);
-		let mod_current_date = new Date(installedMods[id].fileDate);
-
-		if (mod_latest_date > mod_current_date) {
-			activeCategory = "Downloads";
-			alert("New version found downloading!");
-			const downloadLink = installedMods[id].file;
-			const fileNameList = downloadLink.split("/");
-			const fileName = fileNameList[fileNameList.length - 1];
-
-			const modsPath = await path.join(
-				config["mc-dir"],
-				"mods",
-				fileName,
-			);
-
-			const i = downloadingMods.length;
-			downloadingMods = [
-				...downloadingMods,
-				{
-					...installedMods[id],
-					downloadProgress: 0,
-					bytesWritten: 0,
-					status: "pending",
-					fileName: fileName,
-				},
-			];
-
-			await download(
-				downloadLink,
-				modsPath,
-				({ progress, progressTotal }) => {
-					downloadingMods = downloadingMods.map((v, ind) => {
-						if (ind === i) {
-							const isComplete = progress === 0;
-							if (isComplete) {
-								const newMod = {
-									...installedMods[id],
-									fileName: fileName,
-									fileDate: mod.latestFiles[0].fileDate,
-								};
-								// Force reactivity by creating new array
-								installedMods = installedMods.filter(
-									(mmod, iii) => {
-										return iii !== id;
-									},
-								);
-								installedMods = [...installedMods, newMod];
-								// Update config
-								config = {
-									...config,
-									installed: installedMods,
-								};
-								// Save to config file
-								writeTextFile(
-									"config.json",
-									JSON.stringify(config),
-									{
-										baseDir: BaseDirectory.AppData,
-									},
-								);
-							}
-							return {
-								...v,
-								downloadProgress:
-									progress === 0
-										? 100
-										: (progressTotal * 100) / v.fileSize,
-								bytesWritten:
-									progress === 0 ? v.fileSize : progressTotal,
-								status: progress === 0 ? "complete" : "pending",
-							};
-						}
-						return v;
-					});
-				},
-			);
-		} else {
-			alert("Mod is already up to date!");
 		}
 	}
 
@@ -403,14 +258,14 @@
 				return v !== name;
 			});
 		} else {
-			if (mc_versions[name]) {
+			if (mc_versions?.[name]) {
 				selectedVersions = [...selectedVersions, name];
 			}
 		}
 	}
 
 	function applyFilters() {
-		filteredMods = allMods.filter((mod, i) => {
+		filteredMods = $allMods.filter((mod, i) => {
 			return mod.version.some((version) =>
 				selectedVersions.includes(version),
 			);
@@ -423,34 +278,6 @@
 		clearFilters();
 		showPopup = false;
 	}
-
-	async function removeMod(id) {
-		if (installedMods[id]) {
-			const modPath = await path.join(
-				config["mc-dir"],
-				"mods",
-				installedMods[id].fileName,
-			);
-
-			try {
-				await remove(modPath);
-			} catch (e) {
-				console.error(e);
-			} finally {
-				installedMods = installedMods.filter((v, i) => {
-					return i !== id;
-				});
-				config = {
-					...config,
-					installed: installedMods,
-				};
-				// Save to config file
-				writeTextFile("config.json", JSON.stringify(config), {
-					baseDir: BaseDirectory.AppData,
-				});
-			}
-		}
-	}
 </script>
 
 <main class="minecraft-app">
@@ -459,135 +286,35 @@
 	</div>
 
 	<div class="content">
-		<Sidebare {activeCategory} {selectCategory} />
+		<Sidebare activeCategory={$activeCategory} {selectCategory} />
 
 		<div class="main-content">
-			{#if activeCategory === "Browse" || activeCategory === "Installed"}
-				<div class="search-bar">
-					{#if activeCategory === "Browse"}
-						<input
-							type="text"
-							placeholder="Browse mods..."
-							bind:value={searchQuery}
-						/>
-						<button
-							onclick={async () => {
-								allMods = [];
-								searchPage = 0;
-								await search();
-							}}
-							class="filter-button">SEARCH</button
-						>
-						<button class="minecraft-button" onclick={togglePopup}>
-							FILTER
-						</button>
-					{/if}
-				</div>
-				{#if selectedVersions.length > 0}
-					<div class="selected-filters">
-						<span
-							>Active filters: {selectedVersions.join(", ")}</span
-						>
-						<button class="clear-button" onclick={clearFilters}
-							>CLEAR</button
-						>
-					</div>
+			{#if $activeCategory === "Browse" || $activeCategory === "Installed"}
+				<Search
+					activeCategory={$activeCategory}
+					{search}
+					onChange={(q) => {
+						searchQuery = q;
+					}}
+					{togglePopup}
+				/>
+				{#if $activeCategory === "Browse" && selectedVersions.length > 0}
+					<Filters {clearFilters} {selectedVersions} />
 				{/if}
-				<div class="mod-grid">
-					{#each modsToShow as mod, id}
-						<div
-							class="mod-card"
-							in:fly={{ delay: ((id % 50) + 1) * 80 }}
-						>
-							<div class="mod-header"></div>
-							<div class="mod-content">
-								<h3>{mod.name}</h3>
-								<p class="version">
-									{mod.version.join(" / ")}
-								</p>
-								<p class="description">{mod.description}</p>
-								<div class="mod-footer">
-									<span>By {mod.author}</span>
-									<span>{mod.downloads} downloads</span>
-								</div>
-							</div>
-							<div class="mod-actions">
-								{#if !mod.alrInstalled}
-									<button
-										onclick={async () => {
-											if (activeCategory === "Browse") {
-												selectCategory("Downloads");
-												await downloadMod(id);
-											} else {
-												await updateMod(id);
-											}
-										}}
-										class="action-button update"
-										>{activeCategory === "Browse"
-											? "INSTALL"
-											: "UPDATE"}</button
-									>
-								{:else}
-									<p>mod already installed</p>
-								{/if}
-
-								{#if activeCategory === "Installed"}
-									<button
-										onclick={async () => {
-											await removeMod(id);
-										}}
-										class="action-button remove"
-										>REMOVE</button
-									>
-								{/if}
-							</div>
-						</div>
-					{/each}
-				</div>
-			{:else if activeCategory === "Downloads"}
-				<div class="minecraft-downloads-queue">
-					<!-- Downloading -->
-					{#each downloadingMods as mod}
-						<div
-							class="minecraft-download-container"
-							class:minecraft-download-complete={mod.status ===
-								"complete"}
-							class:minecraft-download-active={mod.status ===
-								"pending"}
-						>
-							<div class="minecraft-download-header">
-								<h3 class="minecraft-download-title">
-									{mod.name}
-								</h3>
-								<span class="minecraft-download-percentage"
-									>{mod.downloadProgress || "??"}%</span
-								>
-							</div>
-
-							<div class="minecraft-download-bar-container">
-								<div
-									class="minecraft-download-bar"
-									style={`width: ${mod.downloadProgress}%;`}
-								></div>
-							</div>
-
-							<div class="minecraft-download-info">
-								<span class="minecraft-download-file"
-									>{mod.fileName}</span
-								>
-								<span class="minecraft-download-speed"
-									>{mod.status === "pending"
-										? `${(mod.bytesWritten * 0.001).toFixed(0)}Kb/${mod.fileSize * 0.001 || "??"}Kb`
-										: "Complete"}</span
-								>
-							</div>
-						</div>
-					{/each}
-				</div>
+				<ModGrid
+					activeCategory={$activeCategory}
+					{removeMod}
+					{downloadMod}
+					{updateMod}
+					{modsToShow}
+					{selectCategory}
+				/>
+			{:else if $activeCategory === "Downloads"}
+				<DownloadQueue downloadingMods={$downloadingMods} />
 			{:else}
-				<Settings {changeMCDir} dir={config["mc-dir"]} />
+				<Settings {changeMCDir} dir={$config["mc-dir"]} />
 			{/if}
-			{#if activeCategory === "Browse" && modsToShow.length > 0}
+			{#if $activeCategory === "Browse" && modsToShow.length > 0}
 				<LoadMore {search} {loading} />
 			{/if}
 		</div>

@@ -15,6 +15,13 @@
     "fs:allow-mkdir",
     "http:default",
     "upload:allow-download",
+    "opener:allow-open-path",
+    {
+      "identifier": "opener:default",
+      "allow": [{
+        "path": "**"
+      }]
+    },
     {
       "identifier": "upload:default",
       "allow": [
